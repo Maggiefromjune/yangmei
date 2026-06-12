@@ -197,6 +197,16 @@ body {
 .order-amount { font-size: 16px; font-weight: 700; color: var(--red); }
 .order-detail { font-size: 12px; color: var(--ink-2); line-height: 1.8; }
 .order-detail strong { color: var(--ink); font-weight: 500; }
+.order-edit {
+  margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border);
+}
+.order-edit label { display: block; font-size: 12px; color: var(--ink-2); margin-bottom: 5px; }
+.order-edit input {
+  width: 100%; padding: 8px 10px; border: 1px solid var(--border-2);
+  border-radius: var(--radius-sm); font-size: 13px; font-family: inherit;
+  outline: none; background: var(--surface);
+}
+.order-edit input:focus { border-color: var(--green); }
 .order-statuses {
   display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; padding-top: 10px;
   border-top: 1px solid var(--border);
@@ -336,8 +346,8 @@ body {
       </div>
       <div class="field">
         <label>商户单号 / 转账单号 / 付款人联系方式 *</label>
-        <input type="text" id="f-payno" placeholder="有单号填单号；没有或找不到单号，填付款人联系方式">
-        <div class="err" id="e-payno">请填写单号，或付款人联系方式</div>
+        <input type="text" id="f-payno" placeholder="有单号填单号；没有或找不到单号，填付款人微信/支付宝手机号">
+        <div class="err" id="e-payno">请填写单号，或付款人微信手机号/支付宝手机号</div>
       </div>
     </div>
 
@@ -507,6 +517,7 @@ function normalizeOrders() {
     note: o.note || '',
     payNo: o.payNo || '',
     payMethod: o.payMethod || '',
+    merchantPayNo: o.merchantPayNo || '',
     paid: !!o.paid,
     packed: !!o.packed,
     shipped: !!o.shipped
@@ -667,6 +678,9 @@ function resetForm() {
 function orderStatusText(o) {
   return `${o.paid ? '已付款' : '未付款'} · ${o.packed ? '已打包' : '未打包'} · ${o.shipped ? '已发货' : '未发货'}`;
 }
+function escAttr(v) {
+  return String(v || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+}
 function orderTimeValue(o) {
   return Date.parse((o.time || '').replace(/\//g, '-')) || 0;
 }
@@ -703,6 +717,11 @@ function setOrderStatus(idx, field, checked) {
   saveOrders();
   renderOrders();
 }
+function saveMerchantPayNo(idx, value) {
+  if (!orders[idx]) return;
+  orders[idx].merchantPayNo = value.trim();
+  saveOrders();
+}
 
 function renderOrders() {
   const visibleOrders = getVisibleOrders();
@@ -738,7 +757,12 @@ function renderOrders() {
         <div>配送到达：${o.date}</div>
         <div>付款方式：${o.payMethod || '未填写'}</div>
         <div>付款信息：${o.payNo || '未填写'}</div>
+        <div>商家单号：${o.merchantPayNo || '未填写'}</div>
         <div>地址：${o.addr}</div>
+      </div>
+      <div class="order-edit">
+        <label>商户单号 / 转账单号</label>
+        <input type="text" value="${escAttr(o.merchantPayNo)}" placeholder="商家可在这里补填或修改单号" onchange="saveMerchantPayNo(${idx}, this.value)" onblur="saveMerchantPayNo(${idx}, this.value)">
       </div>
       <div class="order-statuses">
         <label class="status-check"><input type="checkbox" ${o.paid ? 'checked' : ''} onchange="setOrderStatus(${idx}, 'paid', this.checked)"> 已付款</label>
@@ -758,7 +782,7 @@ function clearOrders() {
 }
 function exportCSV() {
   if (!orders.length) { alert('暂无订单'); return; }
-  const header = '订单号,下单时间,收件人,电话,地址,商品,金额,配送日期,付款方式,付款信息,付款状态,打包状态,发货状态';
+  const header = '订单号,下单时间,收件人,电话,地址,商品,金额,配送日期,付款方式,付款信息,商家单号,付款状态,打包状态,发货状态';
   const rows = orders.map(o => [
     o.id, o.time, o.name, o.phone,
     '"' + o.addr.replace(/"/g,'""') + '"',
@@ -766,6 +790,7 @@ function exportCSV() {
     o.total, o.date,
     o.payMethod || '',
     '"' + (o.payNo || '').replace(/"/g,'""') + '"',
+    '"' + (o.merchantPayNo || '').replace(/"/g,'""') + '"',
     o.paid ? '已付款' : '未付款',
     o.packed ? '已打包' : '未打包',
     o.shipped ? '已发货' : '未发货'
