@@ -88,6 +88,7 @@ body {
 .field textarea { resize: vertical; min-height: 72px; line-height: 1.6; }
 .field .err { font-size: 11px; color: var(--red); margin-top: 4px; display: none; }
 .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.phone-list { display: grid; gap: 8px; }
 
 /* product qty rows */
 .prod-row {
@@ -167,6 +168,18 @@ body {
   display: flex; align-items: center; justify-content: space-between;
   margin-bottom: 16px;
 }
+.order-tools {
+  display: grid; grid-template-columns: 1fr auto auto; gap: 10px;
+  align-items: end; margin-bottom: 12px;
+}
+.order-sort-field { margin-bottom: 0; }
+.filter-check {
+  min-height: 39px; display: inline-flex; align-items: center; gap: 6px;
+  padding: 0 10px; border: 1px solid var(--border);
+  border-radius: var(--radius-sm); background: var(--surface);
+  font-size: 12px; color: var(--ink-2); white-space: nowrap;
+}
+.filter-check input { width: 14px; height: 14px; accent-color: var(--green); }
 .orders-title { font-size: 17px; font-weight: 600; }
 .badge {
   display: inline-block; padding: 3px 10px; border-radius: 20px;
@@ -184,6 +197,15 @@ body {
 .order-amount { font-size: 16px; font-weight: 700; color: var(--red); }
 .order-detail { font-size: 12px; color: var(--ink-2); line-height: 1.8; }
 .order-detail strong { color: var(--ink); font-weight: 500; }
+.order-statuses {
+  display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.status-check {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 12px; color: var(--ink-2); user-select: none;
+}
+.status-check input { width: 14px; height: 14px; accent-color: var(--green); }
 .empty-state { text-align: center; padding: 48px 0; color: var(--ink-3); }
 .empty-icon { font-size: 36px; margin-bottom: 8px; }
 .empty-text { font-size: 13px; }
@@ -225,21 +247,14 @@ body {
 .image-actions { display: flex; flex-direction: column; gap: 8px; flex: 1; min-width: 160px; }
 .image-file { display: none; }
 .image-hint { font-size: 11px; color: var(--ink-3); }
-.slot-wrap { display: flex; gap: 8px; margin-bottom: 10px; }
-.slot-list { display: flex; flex-wrap: wrap; gap: 6px; }
-.slot-tag {
-  display: inline-flex; align-items: center; gap: 5px;
-  padding: 4px 10px 4px 12px; border-radius: 20px;
-  background: var(--green-light); border: 1px solid rgba(30,77,43,0.2);
-  font-size: 12px; color: var(--green);
-}
-.slot-rm { cursor: pointer; font-size: 14px; color: rgba(30,77,43,0.5); line-height: 1; }
-.slot-rm:hover { color: var(--red); }
-
 /* page title area */
 .page-hero { margin-bottom: 20px; }
 .page-hero h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; }
 .page-hero p { font-size: 13px; color: var(--ink-3); margin-top: 4px; }
+@media (max-width: 520px) {
+  .order-tools { grid-template-columns: 1fr; align-items: stretch; }
+  .filter-check { justify-content: flex-start; }
+}
 </style>
 </head>
 <body>
@@ -283,9 +298,13 @@ body {
         <div class="err" id="e-name">请填写收件人姓名</div>
       </div>
       <div class="field">
-        <label>联系电话 *（多个号码用逗号或空格分隔）</label>
-        <input type="text" id="f-phone" placeholder="如：138xxxx0001 或 138xxxx0001，139xxxx0002">
-        <div class="err" id="e-phone">请填写联系电话</div>
+        <label>联系电话 *（最多填写 3 个，每格 1 个手机号）</label>
+        <div class="phone-list">
+          <input type="tel" id="f-phone1" inputmode="numeric" maxlength="11" placeholder="手机号 1（必填）" oninput="cleanPhoneInput(this)">
+          <input type="tel" id="f-phone2" inputmode="numeric" maxlength="11" placeholder="手机号 2（可选）" oninput="cleanPhoneInput(this)">
+          <input type="tel" id="f-phone3" inputmode="numeric" maxlength="11" placeholder="手机号 3（可选）" oninput="cleanPhoneInput(this)">
+        </div>
+        <div class="err" id="e-phone">请至少填写 1 个 11 位手机号</div>
       </div>
       <div class="field">
         <label>收货地址 *</label>
@@ -295,22 +314,11 @@ body {
     </div>
 
     <div class="card">
-      <div class="card-label">配送时间</div>
-      <div class="row2">
-        <div class="field">
-          <label>期望日期 *</label>
-          <input type="date" id="f-date">
-          <div class="err" id="e-date">请选择日期</div>
-        </div>
-        <div class="field">
-          <label>时间段 *</label>
-          <select id="f-slot"><option value="">请选择</option></select>
-          <div class="err" id="e-slot">请选择时间段</div>
-        </div>
-      </div>
+      <div class="card-label">配送日期</div>
       <div class="field">
-        <label>备注（可不填）</label>
-        <textarea id="f-note" placeholder="如：礼盒包装、冰袋加量、顺丰寄件等"></textarea>
+        <label>配送到达日期 *</label>
+        <input type="date" id="f-date">
+        <div class="err" id="e-date">请选择配送日期</div>
       </div>
     </div>
 
@@ -338,6 +346,24 @@ body {
         <button class="btn btn-sm" onclick="exportCSV()">导出 CSV</button>
         <button class="btn btn-sm btn-danger" onclick="clearOrders()">清空</button>
       </div>
+    </div>
+    <div class="order-tools">
+      <div class="field order-sort-field">
+        <label>排序</label>
+        <select id="order-sort" onchange="setOrderSort(this.value)">
+          <option value="time-desc">下单时间：新到旧</option>
+          <option value="time-asc">下单时间：旧到新</option>
+          <option value="date-asc">配送日期：近到远</option>
+          <option value="date-desc">配送日期：远到近</option>
+          <option value="amount-desc">金额：高到低</option>
+          <option value="amount-asc">金额：低到高</option>
+          <option value="paid">付款状态：未付款优先</option>
+          <option value="packed">打包状态：未打包优先</option>
+          <option value="shipped">发货状态：未发货优先</option>
+        </select>
+      </div>
+      <label class="filter-check"><input type="checkbox" id="filter-unpacked" onchange="setOrderFilter('unpacked', this.checked)"> 只看未打包</label>
+      <label class="filter-check"><input type="checkbox" id="filter-unshipped" onchange="setOrderFilter('unshipped', this.checked)"> 只看未发货</label>
     </div>
     <div id="orders-list"></div>
   </div>
@@ -392,15 +418,6 @@ body {
     </div>
 
     <div class="card">
-      <div class="card-label">配送时间段</div>
-      <div class="slot-wrap">
-        <input type="text" id="slot-input" placeholder="如：上午 9:00-12:00" style="flex:1;padding:8px 12px;border:1px solid var(--border-2);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;outline:none">
-        <button class="btn btn-sm btn-primary" onclick="addSlot()">添加</button>
-      </div>
-      <div class="slot-list" id="slot-list"></div>
-    </div>
-
-    <div class="card">
       <div class="card-label">店铺信息</div>
       <div class="field">
         <label>店铺名称</label>
@@ -430,18 +447,22 @@ let cfg = {
     { id: 1, name: '东魁杨梅 大篮', spec: '5斤/篮', price: 168, stock: 0, image: '' },
     { id: 2, name: '东魁杨梅 小篮', spec: '3斤/篮', price: 108, stock: 0, image: '' },
     { id: 3, name: '荸荠种 标准篮', spec: '4斤/篮', price: 128, stock: 20, image: '' },
-  ],
-  slots: ['上午 9:00-12:00', '下午 13:00-17:00', '傍晚 17:00-20:00']
+  ]
 };
 let orders = [];
 let formQty = [];
 let editIdx = -1;
 let prodImageData = '';
+const ADMIN_PASSWORD = 'xjym';
+let adminUnlocked = false;
+let orderSort = 'time-desc';
+let orderFilters = { unpacked: false, unshipped: false };
 
 // ─── Persist (localStorage) ──────────────
 function load() {
   try { const s = localStorage.getItem('ym_cfg'); if (s) cfg = JSON.parse(s); } catch(e) {}
   try { const s = localStorage.getItem('ym_orders'); if (s) orders = JSON.parse(s); } catch(e) {}
+  normalizeOrders();
   applyShopInfo();
   renderForm();
   renderOrders();
@@ -459,9 +480,32 @@ function saveCfg() {
 function saveOrders() {
   try { localStorage.setItem('ym_orders', JSON.stringify(orders)); } catch(e) {}
 }
+function normalizeOrders() {
+  orders = orders.map(o => ({
+    ...o,
+    slot: o.slot || '',
+    note: o.note || '',
+    paid: !!o.paid,
+    packed: !!o.packed,
+    shipped: !!o.shipped
+  }));
+}
 
 // ─── Tabs ────────────────────────────────
+function canOpenTab(t) {
+  if (t === 'form' || adminUnlocked) return true;
+  const pwd = prompt('请输入管理密码');
+  if (pwd === null) return false;
+  if (pwd === ADMIN_PASSWORD) {
+    adminUnlocked = true;
+    return true;
+  }
+  alert('密码错误');
+  return false;
+}
+
 function goTab(t) {
+  if (!canOpenTab(t)) return;
   ['form','orders','config'].forEach((n,i) => {
     document.querySelectorAll('.nav-tab')[i].classList.toggle('active', n === t);
     document.getElementById('page-' + n).classList.toggle('active', n === t);
@@ -502,9 +546,6 @@ function renderForm() {
         <button class="qty-btn" onclick="adjQty(${i},1)">+</button>
       </div>
     </div>`).join('');
-  const sel = document.getElementById('f-slot');
-  sel.innerHTML = '<option value="">请选择</option>' +
-    cfg.slots.map(s => `<option value="${s}">${s}</option>`).join('');
   calcTotal();
 }
 
@@ -519,16 +560,27 @@ function calcTotal() {
   document.getElementById('form-total').textContent = '¥' + t;
 }
 
+function cleanPhoneInput(input) {
+  input.value = input.value.replace(/\D/g, '').slice(0, 11);
+}
+function getPhones() {
+  return ['f-phone1','f-phone2','f-phone3']
+    .map(id => document.getElementById(id).value.trim())
+    .filter(Boolean);
+}
+function phonesValid(phones) {
+  return phones.length > 0 && phones.length <= 3 && phones.every(p => /^1\d{10}$/.test(p));
+}
+
 function submitOrder() {
   const name  = document.getElementById('f-name').value.trim();
-  const phone = document.getElementById('f-phone').value.trim().replace(/[，,\s]+/g, '、');
+  const phones = getPhones();
   const addr  = document.getElementById('f-addr').value.trim();
   const date  = document.getElementById('f-date').value;
-  const slot  = document.getElementById('f-slot').value;
   let ok = true;
   const se = (id, v) => { document.getElementById(id).style.display = v ? 'block' : 'none'; if (v) ok = false; };
-  se('e-name', !name); se('e-phone', !phone); se('e-addr', !addr);
-  se('e-date', !date); se('e-slot', !slot);
+  se('e-name', !name); se('e-phone', !phonesValid(phones)); se('e-addr', !addr);
+  se('e-date', !date);
   if (!ok) return;
   const items = cfg.products
     .map((p, i) => formQty[i] > 0 ? { name: p.name, spec: p.spec, qty: formQty[i], price: p.price, sub: formQty[i] * p.price } : null)
@@ -538,8 +590,8 @@ function submitOrder() {
   const pad = n => String(n).padStart(2,'0');
   const oid = 'YM' + String(now.getFullYear()).slice(2) + pad(now.getMonth()+1) + pad(now.getDate()) + pad(now.getHours()) + pad(now.getMinutes()) + pad(Math.floor(Math.random()*100));
   const total = items.reduce((s, it) => s + it.sub, 0);
-  const note  = document.getElementById('f-note').value.trim();
-  const order = { id: oid, time: now.toLocaleString('zh-CN',{hour12:false}), name, phone, addr, date, slot, note, items, total };
+  const phone = phones.join('、');
+  const order = { id: oid, time: now.toLocaleString('zh-CN',{hour12:false}), name, phone, phones, addr, date, items, total, paid: false, packed: false, shipped: false };
   orders.unshift(order);
   saveOrders();
   document.getElementById('result-text').textContent = buildText(order);
@@ -563,8 +615,7 @@ function buildText(o) {
     `  电  话：${o.phone}`,
     `  地  址：${o.addr}`,
     ``,
-    `【配送时间】${o.date} ${o.slot}`,
-    ...(o.note ? [`【备  注】${o.note}`] : []),
+    `【配送日期】${o.date}`,
     ...(cfg.contact ? [``, `联系商家：${cfg.contact}`] : []),
     `━━━━━━━━━━━━━━━━━━━━`,
   ].join('\n');
@@ -578,28 +629,75 @@ function copyOrder() {
 }
 
 function resetForm() {
-  ['f-name','f-phone','f-addr','f-note'].forEach(id => document.getElementById(id).value = '');
+  ['f-name','f-phone1','f-phone2','f-phone3','f-addr'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('f-date').value = '';
-  document.getElementById('f-slot').value = '';
   document.getElementById('result-box').style.display = 'none';
   renderForm();
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 // ─── Orders ──────────────────────────────
+function orderStatusText(o) {
+  return `${o.paid ? '已付款' : '未付款'} · ${o.packed ? '已打包' : '未打包'} · ${o.shipped ? '已发货' : '未发货'}`;
+}
+function orderTimeValue(o) {
+  return Date.parse((o.time || '').replace(/\//g, '-')) || 0;
+}
+function getVisibleOrders() {
+  let list = orders.map((order, idx) => ({ order, idx }));
+  if (orderFilters.unpacked) list = list.filter(({ order }) => !order.packed);
+  if (orderFilters.unshipped) list = list.filter(({ order }) => !order.shipped);
+  const boolCmp = (a, b, field) => Number(a.order[field]) - Number(b.order[field]);
+  const comparers = {
+    'time-desc': (a, b) => orderTimeValue(b.order) - orderTimeValue(a.order),
+    'time-asc': (a, b) => orderTimeValue(a.order) - orderTimeValue(b.order),
+    'date-asc': (a, b) => (a.order.date || '').localeCompare(b.order.date || ''),
+    'date-desc': (a, b) => (b.order.date || '').localeCompare(a.order.date || ''),
+    'amount-desc': (a, b) => (b.order.total || 0) - (a.order.total || 0),
+    'amount-asc': (a, b) => (a.order.total || 0) - (b.order.total || 0),
+    'paid': (a, b) => boolCmp(a, b, 'paid') || orderTimeValue(b.order) - orderTimeValue(a.order),
+    'packed': (a, b) => boolCmp(a, b, 'packed') || orderTimeValue(b.order) - orderTimeValue(a.order),
+    'shipped': (a, b) => boolCmp(a, b, 'shipped') || orderTimeValue(b.order) - orderTimeValue(a.order)
+  };
+  return list.sort(comparers[orderSort] || comparers['time-desc']);
+}
+function setOrderSort(value) {
+  orderSort = value;
+  renderOrders();
+}
+function setOrderFilter(name, checked) {
+  orderFilters[name] = checked;
+  renderOrders();
+}
+function setOrderStatus(idx, field, checked) {
+  if (!orders[idx]) return;
+  orders[idx][field] = checked;
+  saveOrders();
+  renderOrders();
+}
+
 function renderOrders() {
-  document.getElementById('order-badge').textContent = orders.length + ' 单';
+  const visibleOrders = getVisibleOrders();
+  document.getElementById('order-badge').textContent = visibleOrders.length + ' / ' + orders.length + ' 单';
+  document.getElementById('order-sort').value = orderSort;
+  document.getElementById('filter-unpacked').checked = orderFilters.unpacked;
+  document.getElementById('filter-unshipped').checked = orderFilters.unshipped;
   const el = document.getElementById('orders-list');
   if (!orders.length) {
     el.innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-text">暂无订单</div></div>';
     return;
   }
-  el.innerHTML = orders.map((o, idx) => `
+  if (!visibleOrders.length) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-text">没有符合条件的订单</div></div>';
+    return;
+  }
+  el.innerHTML = visibleOrders.map(({ order: o, idx }) => `
     <div class="order-card">
       <div class="order-top">
         <div>
           <div class="order-meta">${o.id} · ${o.time}</div>
           <div class="order-buyer">${o.name} &nbsp; ${o.phone}</div>
+          <div class="config-sub">${orderStatusText(o)}</div>
         </div>
         <div style="text-align:right">
           <div class="order-amount">¥${o.total}</div>
@@ -608,9 +706,13 @@ function renderOrders() {
       </div>
       <div class="order-detail">
         <div>${o.items.map(it => `<strong>${it.name}</strong> ×${it.qty}`).join('&ensp;/&ensp;')}</div>
-        <div>配送：${o.date} ${o.slot}</div>
+        <div>配送到达：${o.date}</div>
         <div>地址：${o.addr}</div>
-        ${o.note ? `<div>备注：${o.note}</div>` : ''}
+      </div>
+      <div class="order-statuses">
+        <label class="status-check"><input type="checkbox" ${o.paid ? 'checked' : ''} onchange="setOrderStatus(${idx}, 'paid', this.checked)"> 已付款</label>
+        <label class="status-check"><input type="checkbox" ${o.packed ? 'checked' : ''} onchange="setOrderStatus(${idx}, 'packed', this.checked)"> 已打包</label>
+        <label class="status-check"><input type="checkbox" ${o.shipped ? 'checked' : ''} onchange="setOrderStatus(${idx}, 'shipped', this.checked)"> 已发货</label>
       </div>
     </div>`).join('');
 }
@@ -625,13 +727,15 @@ function clearOrders() {
 }
 function exportCSV() {
   if (!orders.length) { alert('暂无订单'); return; }
-  const header = '订单号,下单时间,收件人,电话,地址,商品,金额,配送日期,时间段,备注';
+  const header = '订单号,下单时间,收件人,电话,地址,商品,金额,配送日期,付款状态,打包状态,发货状态';
   const rows = orders.map(o => [
     o.id, o.time, o.name, o.phone,
     '"' + o.addr.replace(/"/g,'""') + '"',
     '"' + o.items.map(it => it.name + '×' + it.qty).join('/') + '"',
-    o.total, o.date, o.slot,
-    '"' + (o.note||'').replace(/"/g,'""') + '"'
+    o.total, o.date,
+    o.paid ? '已付款' : '未付款',
+    o.packed ? '已打包' : '未打包',
+    o.shipped ? '已发货' : '未发货'
   ].join(','));
   const csv = '\uFEFF' + header + '\n' + rows.join('\n');
   const a = document.createElement('a');
@@ -662,8 +766,6 @@ function renderConfig() {
         </div>
       </div>`).join('');
   }
-  // slots
-  renderSlots();
   // shop
   document.getElementById('c-name').value    = cfg.shopname  || '';
   document.getElementById('c-sub').value     = cfg.subtitle  || '';
@@ -773,19 +875,6 @@ function fileToImageData(file) {
     reader.readAsDataURL(file);
   });
 }
-
-function renderSlots() {
-  document.getElementById('slot-list').innerHTML = cfg.slots.map((s, i) => `
-    <div class="slot-tag">${s}<span class="slot-rm" onclick="removeSlot(${i})">×</span></div>`).join('');
-}
-function addSlot() {
-  const v = document.getElementById('slot-input').value.trim();
-  if (!v) return;
-  if (cfg.slots.includes(v)) { alert('该时间段已存在'); return; }
-  cfg.slots.push(v); saveCfg(); renderSlots();
-  document.getElementById('slot-input').value = '';
-}
-function removeSlot(i) { cfg.slots.splice(i, 1); saveCfg(); renderSlots(); }
 
 function saveShop() {
   cfg.shopname = document.getElementById('c-name').value.trim() || '杨梅预订';
