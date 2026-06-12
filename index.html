@@ -96,6 +96,12 @@ body {
 }
 .prod-row:last-child { border-bottom: none; padding-bottom: 0; }
 .prod-row:first-child { padding-top: 0; }
+.prod-main { display: flex; align-items: center; gap: 12px; min-width: 0; padding-right: 12px; }
+.prod-thumb {
+  width: 56px; height: 56px; border-radius: var(--radius-sm);
+  object-fit: cover; border: 1px solid var(--border);
+  background: var(--surface-3); flex-shrink: 0;
+}
 .prod-name { font-size: 14px; font-weight: 500; }
 .prod-sub { font-size: 12px; color: var(--ink-3); margin-top: 2px; }
 .prod-sub .price { color: var(--red); font-weight: 500; }
@@ -189,6 +195,16 @@ body {
 }
 .config-row:last-child { border-bottom: none; padding-bottom: 0; }
 .config-row:first-child { padding-top: 0; }
+.config-main { display: flex; align-items: center; gap: 10px; min-width: 0; padding-right: 12px; }
+.config-thumb {
+  width: 44px; height: 44px; border-radius: var(--radius-sm);
+  object-fit: cover; border: 1px solid var(--border);
+  background: var(--surface-3); flex-shrink: 0;
+}
+.img-empty {
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; color: var(--ink-3);
+}
 .config-name { font-size: 14px; font-weight: 500; }
 .config-sub { font-size: 11px; color: var(--ink-3); margin-top: 2px; }
 .section-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
@@ -198,6 +214,17 @@ body {
   display: none;
 }
 .add-form.open { display: block; }
+.image-picker { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.image-preview {
+  width: 96px; height: 96px; border-radius: var(--radius-sm);
+  border: 1px dashed var(--border-2); background: var(--surface);
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden; color: var(--ink-3); font-size: 12px;
+}
+.image-preview img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.image-actions { display: flex; flex-direction: column; gap: 8px; flex: 1; min-width: 160px; }
+.image-file { display: none; }
+.image-hint { font-size: 11px; color: var(--ink-3); }
 .slot-wrap { display: flex; gap: 8px; margin-bottom: 10px; }
 .slot-list { display: flex; flex-wrap: wrap; gap: 6px; }
 .slot-tag {
@@ -343,6 +370,20 @@ body {
           <label>库存上限（0 = 不限）</label>
           <input type="number" id="p-stock" placeholder="0" min="0" value="0">
         </div>
+        <div class="field">
+          <label>商品图片（可选）</label>
+          <div class="image-picker">
+            <div class="image-preview" id="p-image-preview"><span>暂无图片</span></div>
+            <div class="image-actions">
+              <input class="image-file" type="file" id="p-image" accept="image/*" onchange="previewProdImage()">
+              <div class="btn-row">
+                <button class="btn btn-sm" type="button" onclick="chooseProdImage()">选择图片</button>
+                <button class="btn btn-sm btn-danger" type="button" onclick="removeProdImage()">移除</button>
+              </div>
+              <div class="image-hint">图片会自动压缩并保存在本机浏览器中</div>
+            </div>
+          </div>
+        </div>
         <div class="btn-row">
           <button class="btn btn-sm btn-primary" onclick="saveProd()">保存</button>
           <button class="btn btn-sm" onclick="cancelAddProd()">取消</button>
@@ -386,15 +427,16 @@ let cfg = {
   subtitle: '新鲜杨梅，产地直发',
   contact: '',
   products: [
-    { id: 1, name: '东魁杨梅 大篮', spec: '5斤/篮', price: 168, stock: 0 },
-    { id: 2, name: '东魁杨梅 小篮', spec: '3斤/篮', price: 108, stock: 0 },
-    { id: 3, name: '荸荠种 标准篮', spec: '4斤/篮', price: 128, stock: 20 },
+    { id: 1, name: '东魁杨梅 大篮', spec: '5斤/篮', price: 168, stock: 0, image: '' },
+    { id: 2, name: '东魁杨梅 小篮', spec: '3斤/篮', price: 108, stock: 0, image: '' },
+    { id: 3, name: '荸荠种 标准篮', spec: '4斤/篮', price: 128, stock: 20, image: '' },
   ],
   slots: ['上午 9:00-12:00', '下午 13:00-17:00', '傍晚 17:00-20:00']
 };
 let orders = [];
 let formQty = [];
 let editIdx = -1;
+let prodImageData = '';
 
 // ─── Persist (localStorage) ──────────────
 function load() {
@@ -406,7 +448,13 @@ function load() {
   renderConfig();
 }
 function saveCfg() {
-  try { localStorage.setItem('ym_cfg', JSON.stringify(cfg)); } catch(e) {}
+  try {
+    localStorage.setItem('ym_cfg', JSON.stringify(cfg));
+    return true;
+  } catch(e) {
+    alert('保存失败：浏览器本地存储空间不足，请删除较大的商品图片后再试。');
+    return false;
+  }
 }
 function saveOrders() {
   try { localStorage.setItem('ym_orders', JSON.stringify(orders)); } catch(e) {}
@@ -424,6 +472,11 @@ function goTab(t) {
 }
 
 // ─── Form ────────────────────────────────
+function productImageHtml(p, cls, emptyText = '') {
+  if (p.image) return `<img class="${cls}" src="${p.image}" alt="商品图片">`;
+  return emptyText ? `<div class="${cls} img-empty">${emptyText}</div>` : '';
+}
+
 function renderForm() {
   formQty = cfg.products.map(() => 0);
   const el = document.getElementById('form-prod-list');
@@ -433,11 +486,14 @@ function renderForm() {
   }
   el.innerHTML = cfg.products.map((p, i) => `
     <div class="prod-row">
-      <div>
-        <div class="prod-name">${p.name}</div>
-        <div class="prod-sub">
-          ${p.spec} &nbsp;·&nbsp; <span class="price">¥${p.price}</span>
-          ${p.stock > 0 ? ' &nbsp;·&nbsp; 余 ' + p.stock + ' 件' : ''}
+      <div class="prod-main">
+        ${productImageHtml(p, 'prod-thumb')}
+        <div>
+          <div class="prod-name">${p.name}</div>
+          <div class="prod-sub">
+            ${p.spec} &nbsp;·&nbsp; <span class="price">¥${p.price}</span>
+            ${p.stock > 0 ? ' &nbsp;·&nbsp; 余 ' + p.stock + ' 件' : ''}
+          </div>
         </div>
       </div>
       <div class="qty-ctrl">
@@ -593,9 +649,12 @@ function renderConfig() {
   } else {
     el.innerHTML = cfg.products.map((p, i) => `
       <div class="config-row">
-        <div>
-          <div class="config-name">${p.name}</div>
-          <div class="config-sub">${p.spec} · ¥${p.price}${p.stock > 0 ? ' · 限 ' + p.stock + ' 件' : ' · 不限库存'}</div>
+        <div class="config-main">
+          ${productImageHtml(p, 'config-thumb', '无图')}
+          <div>
+            <div class="config-name">${p.name}</div>
+            <div class="config-sub">${p.spec} · ¥${p.price}${p.stock > 0 ? ' · 限 ' + p.stock + ' 件' : ' · 不限库存'}</div>
+          </div>
         </div>
         <div class="btn-row">
           <button class="btn btn-sm" onclick="openEditProd(${i})">编辑</button>
@@ -615,6 +674,9 @@ function openAddProd() {
   editIdx = -1;
   ['p-name','p-spec','p-price'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('p-stock').value = '0';
+  prodImageData = '';
+  document.getElementById('p-image').value = '';
+  renderProdImagePreview('');
   document.getElementById('add-prod-form').classList.add('open');
 }
 function openEditProd(i) {
@@ -623,22 +685,93 @@ function openEditProd(i) {
   document.getElementById('p-spec').value  = p.spec;
   document.getElementById('p-price').value = p.price;
   document.getElementById('p-stock').value = p.stock || 0;
+  prodImageData = p.image || '';
+  document.getElementById('p-image').value = '';
+  renderProdImagePreview(prodImageData);
   document.getElementById('add-prod-form').classList.add('open');
 }
-function cancelAddProd() { document.getElementById('add-prod-form').classList.remove('open'); }
-function saveProd() {
+function cancelAddProd() {
+  document.getElementById('add-prod-form').classList.remove('open');
+  document.getElementById('p-image').value = '';
+  prodImageData = '';
+  renderProdImagePreview('');
+}
+async function saveProd() {
   const name  = document.getElementById('p-name').value.trim();
   const spec  = document.getElementById('p-spec').value.trim();
   const price = parseFloat(document.getElementById('p-price').value);
   const stock = parseInt(document.getElementById('p-stock').value) || 0;
   if (!name || !spec || isNaN(price) || price < 0) { alert('请完整填写商品信息'); return; }
-  const prod = { id: Date.now(), name, spec, price, stock };
+  const imageInput = document.getElementById('p-image');
+  if (imageInput.files && imageInput.files[0]) {
+    try {
+      prodImageData = await fileToImageData(imageInput.files[0]);
+      renderProdImagePreview(prodImageData);
+    } catch(e) {
+      alert('图片读取失败，请重新选择');
+      return;
+    }
+  }
+  const id = editIdx >= 0 ? cfg.products[editIdx].id : Date.now();
+  const prod = { id, name, spec, price, stock, image: prodImageData || '' };
   if (editIdx >= 0) cfg.products[editIdx] = prod; else cfg.products.push(prod);
-  saveCfg(); cancelAddProd(); renderConfig();
+  if (!saveCfg()) return;
+  cancelAddProd(); renderConfig(); renderForm();
 }
 function delProd(i) {
   if (!confirm('确认删除该规格？')) return;
   cfg.products.splice(i, 1); saveCfg(); renderConfig();
+}
+
+function chooseProdImage() {
+  document.getElementById('p-image').click();
+}
+function renderProdImagePreview(image) {
+  const el = document.getElementById('p-image-preview');
+  el.innerHTML = image ? `<img src="${image}" alt="商品图片预览">` : '<span>暂无图片</span>';
+}
+async function previewProdImage() {
+  const input = document.getElementById('p-image');
+  const file = input.files && input.files[0];
+  if (!file) return;
+  try {
+    prodImageData = await fileToImageData(file);
+    renderProdImagePreview(prodImageData);
+  } catch(e) {
+    alert('图片读取失败，请重新选择');
+    input.value = '';
+  }
+}
+function removeProdImage() {
+  prodImageData = '';
+  document.getElementById('p-image').value = '';
+  renderProdImagePreview('');
+}
+function fileToImageData(file) {
+  return new Promise((resolve, reject) => {
+    if (!file.type || !file.type.startsWith('image/')) { reject(); return; }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const maxSide = 720;
+        const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(img.width * scale));
+        canvas.height = Math.max(1, Math.round(img.height * scale));
+        const ctx = canvas.getContext('2d');
+        if (!ctx) { reject(); return; }
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', 0.86));
+      };
+      img.onerror = reject;
+      img.src = reader.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 }
 
 function renderSlots() {
@@ -658,7 +791,7 @@ function saveShop() {
   cfg.shopname = document.getElementById('c-name').value.trim() || '杨梅预订';
   cfg.subtitle = document.getElementById('c-sub').value.trim();
   cfg.contact  = document.getElementById('c-contact').value.trim();
-  saveCfg(); applyShopInfo(); alert('已保存');
+  if (saveCfg()) { applyShopInfo(); alert('已保存'); }
 }
 function applyShopInfo() {
   document.getElementById('header-shopname').textContent = cfg.shopname;
