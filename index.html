@@ -169,7 +169,7 @@ body {
   margin-bottom: 16px;
 }
 .order-tools {
-  display: grid; grid-template-columns: 1fr auto auto; gap: 10px;
+  display: grid; grid-template-columns: 1fr auto auto auto; gap: 10px;
   align-items: end; margin-bottom: 12px;
 }
 .order-sort-field { margin-bottom: 0; }
@@ -322,6 +322,25 @@ body {
       </div>
     </div>
 
+    <div class="card">
+      <div class="card-label">付款信息</div>
+      <div class="field">
+        <label>付款方式 *</label>
+        <select id="f-paymethod">
+          <option value="">请选择</option>
+          <option value="微信">微信</option>
+          <option value="支付宝">支付宝</option>
+          <option value="其他">其他</option>
+        </select>
+        <div class="err" id="e-paymethod">请选择付款方式</div>
+      </div>
+      <div class="field">
+        <label>商户单号 / 转账单号 / 付款人联系方式 *</label>
+        <input type="text" id="f-payno" placeholder="有单号填单号；没有或找不到单号，填付款人联系方式">
+        <div class="err" id="e-payno">请填写单号，或付款人联系方式</div>
+      </div>
+    </div>
+
     <button class="btn btn-primary btn-full" onclick="submitOrder()">确认预订 →</button>
 
     <div class="result-box" id="result-box">
@@ -362,6 +381,7 @@ body {
           <option value="shipped">发货状态：未发货优先</option>
         </select>
       </div>
+      <label class="filter-check"><input type="checkbox" id="filter-unpaid" onchange="setOrderFilter('unpaid', this.checked)"> 只看未付款</label>
       <label class="filter-check"><input type="checkbox" id="filter-unpacked" onchange="setOrderFilter('unpacked', this.checked)"> 只看未打包</label>
       <label class="filter-check"><input type="checkbox" id="filter-unshipped" onchange="setOrderFilter('unshipped', this.checked)"> 只看未发货</label>
     </div>
@@ -456,7 +476,7 @@ let prodImageData = '';
 const ADMIN_PASSWORD = 'xjym';
 let adminUnlocked = false;
 let orderSort = 'time-desc';
-let orderFilters = { unpacked: false, unshipped: false };
+let orderFilters = { unpaid: false, unpacked: false, unshipped: false };
 
 // ─── Persist (localStorage) ──────────────
 function load() {
@@ -485,6 +505,8 @@ function normalizeOrders() {
     ...o,
     slot: o.slot || '',
     note: o.note || '',
+    payNo: o.payNo || '',
+    payMethod: o.payMethod || '',
     paid: !!o.paid,
     packed: !!o.packed,
     shipped: !!o.shipped
@@ -577,10 +599,12 @@ function submitOrder() {
   const phones = getPhones();
   const addr  = document.getElementById('f-addr').value.trim();
   const date  = document.getElementById('f-date').value;
+  const payMethod = document.getElementById('f-paymethod').value;
+  const payNo = document.getElementById('f-payno').value.trim();
   let ok = true;
   const se = (id, v) => { document.getElementById(id).style.display = v ? 'block' : 'none'; if (v) ok = false; };
   se('e-name', !name); se('e-phone', !phonesValid(phones)); se('e-addr', !addr);
-  se('e-date', !date);
+  se('e-date', !date); se('e-paymethod', !payMethod); se('e-payno', !payNo);
   if (!ok) return;
   const items = cfg.products
     .map((p, i) => formQty[i] > 0 ? { name: p.name, spec: p.spec, qty: formQty[i], price: p.price, sub: formQty[i] * p.price } : null)
@@ -591,7 +615,7 @@ function submitOrder() {
   const oid = 'YM' + String(now.getFullYear()).slice(2) + pad(now.getMonth()+1) + pad(now.getDate()) + pad(now.getHours()) + pad(now.getMinutes()) + pad(Math.floor(Math.random()*100));
   const total = items.reduce((s, it) => s + it.sub, 0);
   const phone = phones.join('、');
-  const order = { id: oid, time: now.toLocaleString('zh-CN',{hour12:false}), name, phone, phones, addr, date, items, total, paid: false, packed: false, shipped: false };
+  const order = { id: oid, time: now.toLocaleString('zh-CN',{hour12:false}), name, phone, phones, addr, date, payMethod, payNo, items, total, paid: false, packed: false, shipped: false };
   orders.unshift(order);
   saveOrders();
   document.getElementById('result-text').textContent = buildText(order);
@@ -615,6 +639,8 @@ function buildText(o) {
     `  电  话：${o.phone}`,
     `  地  址：${o.addr}`,
     ``,
+    `【付款方式】${o.payMethod || '未填写'}`,
+    `【付款信息】${o.payNo || '未填写'}`,
     `【配送日期】${o.date}`,
     ...(cfg.contact ? [``, `联系商家：${cfg.contact}`] : []),
     `━━━━━━━━━━━━━━━━━━━━`,
@@ -629,8 +655,9 @@ function copyOrder() {
 }
 
 function resetForm() {
-  ['f-name','f-phone1','f-phone2','f-phone3','f-addr'].forEach(id => document.getElementById(id).value = '');
+  ['f-name','f-phone1','f-phone2','f-phone3','f-addr','f-payno'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('f-date').value = '';
+  document.getElementById('f-paymethod').value = '';
   document.getElementById('result-box').style.display = 'none';
   renderForm();
   window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -645,6 +672,7 @@ function orderTimeValue(o) {
 }
 function getVisibleOrders() {
   let list = orders.map((order, idx) => ({ order, idx }));
+  if (orderFilters.unpaid) list = list.filter(({ order }) => !order.paid);
   if (orderFilters.unpacked) list = list.filter(({ order }) => !order.packed);
   if (orderFilters.unshipped) list = list.filter(({ order }) => !order.shipped);
   const boolCmp = (a, b, field) => Number(a.order[field]) - Number(b.order[field]);
@@ -680,6 +708,7 @@ function renderOrders() {
   const visibleOrders = getVisibleOrders();
   document.getElementById('order-badge').textContent = visibleOrders.length + ' / ' + orders.length + ' 单';
   document.getElementById('order-sort').value = orderSort;
+  document.getElementById('filter-unpaid').checked = orderFilters.unpaid;
   document.getElementById('filter-unpacked').checked = orderFilters.unpacked;
   document.getElementById('filter-unshipped').checked = orderFilters.unshipped;
   const el = document.getElementById('orders-list');
@@ -707,6 +736,8 @@ function renderOrders() {
       <div class="order-detail">
         <div>${o.items.map(it => `<strong>${it.name}</strong> ×${it.qty}`).join('&ensp;/&ensp;')}</div>
         <div>配送到达：${o.date}</div>
+        <div>付款方式：${o.payMethod || '未填写'}</div>
+        <div>付款信息：${o.payNo || '未填写'}</div>
         <div>地址：${o.addr}</div>
       </div>
       <div class="order-statuses">
@@ -727,12 +758,14 @@ function clearOrders() {
 }
 function exportCSV() {
   if (!orders.length) { alert('暂无订单'); return; }
-  const header = '订单号,下单时间,收件人,电话,地址,商品,金额,配送日期,付款状态,打包状态,发货状态';
+  const header = '订单号,下单时间,收件人,电话,地址,商品,金额,配送日期,付款方式,付款信息,付款状态,打包状态,发货状态';
   const rows = orders.map(o => [
     o.id, o.time, o.name, o.phone,
     '"' + o.addr.replace(/"/g,'""') + '"',
     '"' + o.items.map(it => it.name + '×' + it.qty).join('/') + '"',
     o.total, o.date,
+    o.payMethod || '',
+    '"' + (o.payNo || '').replace(/"/g,'""') + '"',
     o.paid ? '已付款' : '未付款',
     o.packed ? '已打包' : '未打包',
     o.shipped ? '已发货' : '未发货'
