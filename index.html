@@ -206,7 +206,9 @@ body {
 .order-card {
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--radius); padding: 14px 16px; margin-bottom: 10px;
+  transition: border-color 0.15s;
 }
+.order-card.selected { border-color: var(--green); background: var(--green-light); }
 .order-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
 .order-meta { font-size: 11px; color: var(--ink-3); font-family: monospace; }
 .order-buyer { font-size: 14px; font-weight: 600; margin-top: 2px; }
@@ -223,6 +225,24 @@ body {
   outline: none; background: var(--surface);
 }
 .order-edit input:focus { border-color: var(--green); }
+/* 多选 */
+.order-select-cb { width: 16px; height: 16px; accent-color: var(--green); cursor: pointer; flex-shrink: 0; margin-top: 3px; }
+.order-card-header { display: flex; align-items: flex-start; gap: 10px; }
+.bulk-bar {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+  background: var(--ink); color: #fff;
+  border-radius: 24px; padding: 10px 16px;
+  display: none; align-items: center; gap: 12px;
+  font-size: 13px; box-shadow: 0 4px 20px rgba(0,0,0,0.28);
+  z-index: 200; white-space: nowrap;
+}
+.bulk-bar.show { display: flex; }
+.bulk-bar-count { font-weight: 600; }
+.bulk-bar .bbtn { padding: 6px 14px; font-size: 12px; border-radius: 16px; border: 1px solid transparent; cursor: pointer; font-family: inherit; }
+.bulk-bar .bbtn-copy { background: #fff; color: var(--ink); }
+.bulk-bar .bbtn-copy:hover { background: #e8e8e8; }
+.bulk-bar .bbtn-cancel { background: transparent; color: rgba(255,255,255,0.65); }
+.bulk-bar .bbtn-cancel:hover { color: #fff; }
 .order-statuses {
   display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; padding-top: 10px;
   border-top: 1px solid var(--border);
@@ -412,6 +432,13 @@ body {
       <label class="filter-check"><input type="checkbox" id="filter-unshipped" onchange="setOrderFilter('unshipped', this.checked)"> 只看未发货</label>
     </div>
     <div id="orders-list"></div>
+  </div>
+
+  <!-- 多选浮动操作栏 -->
+  <div class="bulk-bar" id="bulk-bar">
+    <span class="bulk-bar-count" id="bulk-count">已选 0 条</span>
+    <button class="bbtn bbtn-copy" onclick="copySelected()">复制</button>
+    <button class="bbtn bbtn-cancel" onclick="clearSelection()">取消</button>
   </div>
 
   <!-- ── 商家配置 ── -->
@@ -820,34 +847,42 @@ function renderOrders() {
     return;
   }
   el.innerHTML = visibleOrders.map(({ order: o, idx }) => `
-    <div class="order-card">
-      <div class="order-top">
-        <div>
-          <div class="order-meta">${o.id} · ${o.time}</div>
-          <div class="order-buyer">${o.name} &nbsp; ${o.phone}</div>
-          <div class="config-sub">${orderStatusText(o)}</div>
+    <div class="order-card" id="card-${idx}">
+      <div class="order-card-header">
+        <input type="checkbox" class="order-select-cb" data-idx="${idx}" onchange="onSelectChange()">
+        <div style="flex:1;min-width:0">
+          <div class="order-top">
+            <div>
+              <div class="order-meta">${o.id} · ${o.time}</div>
+              <div class="order-buyer">${o.name} &nbsp; ${o.phone}</div>
+              <div class="config-sub">${orderStatusText(o)}</div>
+            </div>
+            <div style="text-align:right">
+              <div class="order-amount">¥${o.total}</div>
+              <div class="btn-row" style="justify-content:flex-end;margin-top:6px">
+                <button class="btn btn-sm" onclick="copySingle(${idx})">复制</button>
+                <button class="btn btn-sm btn-danger" onclick="delOrder(${idx})">删除</button>
+              </div>
+            </div>
+          </div>
+          <div class="order-detail">
+            <div>${o.items.map(it => `<strong>${it.name}</strong> ×${it.qty}`).join('&ensp;/&ensp;')}</div>
+            <div>配送到达：${o.date}</div>
+            <div>付款方式：${o.payMethod || '未填写'}</div>
+            <div>付款信息：${o.payNo || '未填写'}</div>
+            <div>商家单号：${o.merchantPayNo || '未填写'}</div>
+            <div>地址：${o.addr}</div>
+          </div>
+          <div class="order-edit">
+            <label>商户单号 / 转账单号</label>
+            <input type="text" value="${escAttr(o.merchantPayNo)}" placeholder="商家可在这里补填或修改单号" onchange="saveMerchantPayNo(${idx}, this.value)" onblur="saveMerchantPayNo(${idx}, this.value)">
+          </div>
+          <div class="order-statuses">
+            <label class="status-check"><input type="checkbox" ${o.paid ? 'checked' : ''} onchange="setOrderStatus(${idx}, 'paid', this.checked)"> 已付款</label>
+            <label class="status-check"><input type="checkbox" ${o.packed ? 'checked' : ''} onchange="setOrderStatus(${idx}, 'packed', this.checked)"> 已打包</label>
+            <label class="status-check"><input type="checkbox" ${o.shipped ? 'checked' : ''} onchange="setOrderStatus(${idx}, 'shipped', this.checked)"> 已发货</label>
+          </div>
         </div>
-        <div style="text-align:right">
-          <div class="order-amount">¥${o.total}</div>
-          <button class="btn btn-sm btn-danger" style="margin-top:6px" onclick="delOrder(${idx})">删除</button>
-        </div>
-      </div>
-      <div class="order-detail">
-        <div>${o.items.map(it => `<strong>${it.name}</strong> ×${it.qty}`).join('&ensp;/&ensp;')}</div>
-        <div>配送到达：${o.date}</div>
-        <div>付款方式：${o.payMethod || '未填写'}</div>
-        <div>付款信息：${o.payNo || '未填写'}</div>
-        <div>商家单号：${o.merchantPayNo || '未填写'}</div>
-        <div>地址：${o.addr}</div>
-      </div>
-      <div class="order-edit">
-        <label>商户单号 / 转账单号</label>
-        <input type="text" value="${escAttr(o.merchantPayNo)}" placeholder="商家可在这里补填或修改单号" onchange="saveMerchantPayNo(${idx}, this.value)" onblur="saveMerchantPayNo(${idx}, this.value)">
-      </div>
-      <div class="order-statuses">
-        <label class="status-check"><input type="checkbox" ${o.paid ? 'checked' : ''} onchange="setOrderStatus(${idx}, 'paid', this.checked)"> 已付款</label>
-        <label class="status-check"><input type="checkbox" ${o.packed ? 'checked' : ''} onchange="setOrderStatus(${idx}, 'packed', this.checked)"> 已打包</label>
-        <label class="status-check"><input type="checkbox" ${o.shipped ? 'checked' : ''} onchange="setOrderStatus(${idx}, 'shipped', this.checked)"> 已发货</label>
       </div>
     </div>`).join('');
 }
@@ -865,7 +900,50 @@ async function clearOrders() {
   } catch(e) { alert('清空失败：' + e.message); }
   setStatus('');
 }
-function exportCSV() {
+// ─── 多选复制 ─────────────────────────────
+function getSelectedIdxs() {
+  return Array.from(document.querySelectorAll('.order-select-cb:checked'))
+    .map(cb => parseInt(cb.dataset.idx));
+}
+function onSelectChange() {
+  const idxs = getSelectedIdxs();
+  const bar = document.getElementById('bulk-bar');
+  if (idxs.length > 0) {
+    bar.classList.add('show');
+    document.getElementById('bulk-count').textContent = `已选 ${idxs.length} 条`;
+  } else {
+    bar.classList.remove('show');
+  }
+  // 更新卡片高亮
+  document.querySelectorAll('.order-select-cb').forEach(cb => {
+    document.getElementById('card-' + cb.dataset.idx)
+      ?.classList.toggle('selected', cb.checked);
+  });
+}
+function clearSelection() {
+  document.querySelectorAll('.order-select-cb').forEach(cb => { cb.checked = false; });
+  document.querySelectorAll('.order-card').forEach(c => c.classList.remove('selected'));
+  document.getElementById('bulk-bar').classList.remove('show');
+}
+function orderToText(o) { return buildText(o); }
+function copySingle(idx) {
+  const o = orders[idx]; if (!o) return;
+  navigator.clipboard.writeText(orderToText(o))
+    .then(() => setStatus('✓ 已复制订单'))
+    .catch(() => alert('复制失败，请手动复制'));
+  setTimeout(() => setStatus(''), 2000);
+}
+function copySelected() {
+  const idxs = getSelectedIdxs();
+  if (!idxs.length) return;
+  const text = idxs.map(i => orderToText(orders[i])).join('\n\n\n');
+  navigator.clipboard.writeText(text)
+    .then(() => { setStatus(`✓ 已复制 ${idxs.length} 条订单`); clearSelection(); })
+    .catch(() => alert('复制失败，请手动复制'));
+  setTimeout(() => setStatus(''), 2500);
+}
+
+
   if (!orders.length) { alert('暂无订单'); return; }
   const header = '订单号,下单时间,收件人,电话,地址,商品,金额,配送日期,付款方式,付款信息,商家单号,付款状态,打包状态,发货状态';
   const rows = orders.map(o => [
