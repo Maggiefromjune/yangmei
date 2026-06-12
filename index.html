@@ -4,6 +4,22 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>杨梅预订</title>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getFirestore, doc, getDoc, setDoc, collection, addDoc, getDocs, updateDoc, deleteDoc, onSnapshot, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+const firebaseConfig = {
+  apiKey: "AIzaSyAdpvwuiNIgz3mqrWmIG-rLAAV8A-uGO-k",
+  authDomain: "yangmei-order-1f5fe.firebaseapp.com",
+  projectId: "yangmei-order-1f5fe",
+  storageBucket: "yangmei-order-1f5fe.firebasestorage.app",
+  messagingSenderId: "13111803701",
+  appId: "1:13111803701:web:cac6ee87aab624db93967c"
+};
+const _app = initializeApp(firebaseConfig);
+const _db = getFirestore(_app);
+window._fb = { db:_db, doc, getDoc, setDoc, collection, addDoc, getDocs, updateDoc, deleteDoc, onSnapshot, query, orderBy };
+window.dispatchEvent(new Event("fb-ready"));
+</script>
 <style>
 :root {
   --ink: #1a1a18;
@@ -436,7 +452,7 @@ body {
                 <button class="btn btn-sm" type="button" onclick="chooseProdImage()">选择图片</button>
                 <button class="btn btn-sm btn-danger" type="button" onclick="removeProdImage()">移除</button>
               </div>
-              <div class="image-hint">图片会自动压缩并保存在本机浏览器中</div>
+              <div class="image-hint">图片会自动压缩后存入云端</div>
             </div>
           </div>
         </div>
@@ -488,28 +504,88 @@ let adminUnlocked = false;
 let orderSort = 'time-desc';
 let orderFilters = { unpaid: false, unpacked: false, unshipped: false };
 
-// ─── Persist (localStorage) ──────────────
-function load() {
-  try { const s = localStorage.getItem('ym_cfg'); if (s) cfg = JSON.parse(s); } catch(e) {}
-  try { const s = localStorage.getItem('ym_orders'); if (s) orders = JSON.parse(s); } catch(e) {}
+// ─── Persist (Firebase Firestore) ────────
+let _fbReady = false;
+let _unsubOrders = null;
+
+function fb() { return window._fb; }
+
+async function load() {
+  // 等待 Firebase 模块加载完成
+  if (!window._fb) {
+    await new Promise(r => window.addEventListener('fb-ready', r, { once: true }));
+  }
+  _fbReady = true;
+  setStatus('正在连接云端…');
+
+  // 加载配置
+  try {
+    const { db, doc, getDoc } = fb();
+    const snap = await getDoc(doc(db, 'store', 'config'));
+    if (snap.exists()) cfg = { ...cfg, ...snap.data() };
+  } catch(e) { console.warn('加载配置失败', e); }
+
   normalizeOrders();
   applyShopInfo();
   renderForm();
-  renderOrders();
   renderConfig();
+
+  // 实时监听订单
+  startOrdersListener();
+  setStatus('');
 }
-function saveCfg() {
+
+function setStatus(msg) {
+  let el = document.getElementById('fb-status');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'fb-status';
+    el.style.cssText = 'position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:rgba(30,77,43,0.92);color:#fff;padding:8px 18px;border-radius:20px;font-size:12px;z-index:9999;pointer-events:none;transition:opacity 0.3s';
+    document.body.appendChild(el);
+  }
+  if (msg) { el.textContent = msg; el.style.opacity = '1'; }
+  else { el.style.opacity = '0'; }
+}
+
+function startOrdersListener() {
+  if (_unsubOrders) _unsubOrders();
+  const { db, collection, onSnapshot, query, orderBy } = fb();
+  const q = query(collection(db, 'orders'), orderBy('_ts', 'desc'));
+  _unsubOrders = onSnapshot(q, snap => {
+    orders = snap.docs.map(d => ({ _docId: d.id, ...d.data() }));
+    normalizeOrders();
+    renderOrders();
+  }, err => console.warn('订单监听错误', err));
+}
+
+async function saveCfg() {
+  if (!_fbReady) return false;
   try {
-    localStorage.setItem('ym_cfg', JSON.stringify(cfg));
+    const { db, doc, setDoc } = fb();
+    await setDoc(doc(db, 'store', 'config'), cfg);
     return true;
   } catch(e) {
-    alert('保存失败：浏览器本地存储空间不足，请删除较大的商品图片后再试。');
+    alert('保存失败，请检查网络连接');
     return false;
   }
 }
-function saveOrders() {
-  try { localStorage.setItem('ym_orders', JSON.stringify(orders)); } catch(e) {}
+
+// orders 的增删改直接操作 Firestore，不再维护本地 orders 数组写入
+async function addOrderToCloud(order) {
+  const { db, collection, addDoc } = fb();
+  const docRef = await addDoc(collection(db, 'orders'), { ...order, _ts: Date.now() });
+  return docRef.id;
 }
+async function updateOrderInCloud(docId, fields) {
+  const { db, doc, updateDoc } = fb();
+  await updateDoc(doc(db, 'orders', docId), fields);
+}
+async function deleteOrderFromCloud(docId) {
+  const { db, doc, deleteDoc } = fb();
+  await deleteDoc(doc(db, 'orders', docId));
+}
+// 兼容旧接口（renderOrders 里用 idx 找 order）
+function saveOrders() { /* no-op，由 Firestore 实时监听维护 */ }
 function normalizeOrders() {
   orders = orders.map(o => ({
     ...o,
@@ -605,7 +681,7 @@ function phonesValid(phones) {
   return phones.length > 0 && phones.length <= 3 && phones.every(p => /^1\d{10}$/.test(p));
 }
 
-function submitOrder() {
+async function submitOrder() {
   const name  = document.getElementById('f-name').value.trim();
   const phones = getPhones();
   const addr  = document.getElementById('f-addr').value.trim();
@@ -626,9 +702,16 @@ function submitOrder() {
   const oid = 'YM' + String(now.getFullYear()).slice(2) + pad(now.getMonth()+1) + pad(now.getDate()) + pad(now.getHours()) + pad(now.getMinutes()) + pad(Math.floor(Math.random()*100));
   const total = items.reduce((s, it) => s + it.sub, 0);
   const phone = phones.join('、');
-  const order = { id: oid, time: now.toLocaleString('zh-CN',{hour12:false}), name, phone, phones, addr, date, payMethod, payNo, items, total, paid: false, packed: false, shipped: false };
-  orders.unshift(order);
-  saveOrders();
+  const order = { id: oid, time: now.toLocaleString('zh-CN',{hour12:false}), name, phone, phones, addr, date, payMethod, payNo, items, total, paid: false, packed: false, shipped: false, merchantPayNo: '' };
+  setStatus('正在提交订单…');
+  try {
+    await addOrderToCloud(order);
+  } catch(e) {
+    setStatus('');
+    alert('提交失败，请检查网络后重试');
+    return;
+  }
+  setStatus('');
   document.getElementById('result-text').textContent = buildText(order);
   document.getElementById('result-box').style.display = 'block';
   document.getElementById('copy-tip').textContent = '';
@@ -712,15 +795,12 @@ function setOrderFilter(name, checked) {
   renderOrders();
 }
 function setOrderStatus(idx, field, checked) {
-  if (!orders[idx]) return;
-  orders[idx][field] = checked;
-  saveOrders();
-  renderOrders();
+  const o = orders[idx]; if (!o || !o._docId) return;
+  updateOrderInCloud(o._docId, { [field]: checked }).catch(e => alert('更新失败：' + e.message));
 }
 function saveMerchantPayNo(idx, value) {
-  if (!orders[idx]) return;
-  orders[idx].merchantPayNo = value.trim();
-  saveOrders();
+  const o = orders[idx]; if (!o || !o._docId) return;
+  updateOrderInCloud(o._docId, { merchantPayNo: value.trim() }).catch(() => {});
 }
 
 function renderOrders() {
@@ -773,12 +853,17 @@ function renderOrders() {
 }
 
 function delOrder(idx) {
+  const o = orders[idx]; if (!o) return;
   if (!confirm('确认删除这条订单？')) return;
-  orders.splice(idx, 1); saveOrders(); renderOrders();
+  deleteOrderFromCloud(o._docId).catch(e => alert('删除失败：' + e.message));
 }
-function clearOrders() {
+async function clearOrders() {
   if (!confirm('确认清空所有订单？此操作无法恢复。')) return;
-  orders = []; saveOrders(); renderOrders();
+  setStatus('正在清空…');
+  try {
+    await Promise.all(orders.filter(o => o._docId).map(o => deleteOrderFromCloud(o._docId)));
+  } catch(e) { alert('清空失败：' + e.message); }
+  setStatus('');
 }
 function exportCSV() {
   if (!orders.length) { alert('暂无订单'); return; }
